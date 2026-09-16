@@ -342,7 +342,7 @@ case "${command_name}" in
           },
           pristine_pytest: {
             status: (if $baseline[0].pristine_pytest_exit == 0 then "passed" else "failed" end),
-            command: "python -m pytest tests profiling/tests -m 'not hf_token_required'",
+            command: "python -m pytest tests profiling/tests -m \"not hf_token_required\"",
             exit_code: $baseline[0].pristine_pytest_exit,
             log_sha256: $pytest_log_sha,
             junit_xml_sha256: $pytest_xml_sha
