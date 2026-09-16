@@ -240,7 +240,14 @@ class ProcessGuardTests(unittest.TestCase):
                 cwd=Path(directory),
             )
         self.assertEqual(result.status, "rss_limit")
-        self.assertGreater(result.peak_rss_bytes, 32 * 1024 * 1024)
+        limit = 32 * 1024 * 1024
+        self.assertGreaterEqual(result.peak_rss_bytes, limit)
+        if result.ended_by == "cgroup":
+            self.assertIsNotNone(result.cgroup_events)
+            self.assertGreater(result.cgroup_events.get("oom_kill", 0), 0)
+        else:
+            self.assertEqual(result.ended_by, "parent")
+            self.assertGreater(result.peak_rss_bytes, limit)
 
 
 if __name__ == "__main__":
