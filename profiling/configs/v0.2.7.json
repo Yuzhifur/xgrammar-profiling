@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "study": "xgrammar-v0.2.7-cache-and-repetition",
+  "source": {
+    "release_commit": "82505d0d987c36a4209fb3d8571cf6b0f28b5acd"
+  },
+  "tokenizer": {
+    "repository": "Qwen/Qwen3-0.6B",
+    "revision": "c916fa4defd319b7d4e4da17604ca7338f4d99f5",
+    "snapshot_dir": "profiling/data/tokenizer"
+  },
+  "bfcl": {
+    "snapshot_dir": "profiling/data/bfcl",
+    "enabled": true,
+    "trace_requests": 5
+  },
+  "variants": {
+    "root": "profiling/build/variants",
+    "required": [
+      "pristine",
+      "production-profile",
+      "no-rule-cache",
+      "no-repeat-compression",
+      "production-diagnostic",
+      "no-rule-cache-diagnostic"
+    ]
+  },
+  "cache": {
+    "tools_per_request": [10, 50, 100],
+    "seen_before_fractions": [0.0, 0.5, 0.9],
+    "requests_per_stream": 20,
+    "cache_limit_bytes": 536870912,
+    "compiler_threads": 1,
+    "seed": 270227,
+    "include_500_tool_subset": false,
+    "secondary": {
+      "enabled": true,
+      "exact_repeat": {"tools": 100, "requests": 5},
+      "budget_sweep_bytes": [67108864, 268435456, 536870912],
+      "thread_sweep": [1, 2, 4, "physical-cap-8"]
+    }
+  },
+  "repetition": {
+    "families": ["json-string", "json-array-primitive", "regex-range"],
+    "bounds": [64, 127, 128, 129, 130, 256, 1024, 4096, 65536, 1000000],
+    "focused_families": ["json-array-object", "regex-exact", "regex-nonzero-min", "json-array-minmax"],
+    "focused_bounds": [127, 128, 129, 130, 1024, 65536]
+  },
+  "execution": {
+    "timeout_seconds": 120,
+    "rss_limit_bytes": 6442450944,
+    "rss_poll_interval_seconds": 0.05,
+    "termination_grace_seconds": 5
+  },
+  "sampling": {
+    "warmup_blocks": 1,
+    "minimum_blocks": 7,
+    "maximum_blocks": 20,
+    "relative_ci_half_width": 0.05,
+    "bootstrap_resamples": 10000,
+    "bootstrap_seed": 270227
+  },
+  "results_root": "profiling/results"
+}

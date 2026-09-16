@@ -801,6 +801,57 @@ TVM_FFI_STATIC_INIT_BLOCK() {
   // ----- Global functions: testing, kernels, config, exceptions -----
   refl::GlobalDef()
       .def(
+          "xgrammar.tvm_ffi_binding.testing._profiling_build_config",
+          []() { return ffi::String(Testing_GetProfilingBuildConfigJSON()); }
+      )
+#if XGRAMMAR_ENABLE_PROFILING_API
+      .def(
+          "xgrammar.tvm_ffi_binding.testing._profiling_clear_rule_level_cache",
+          [](O compiler_ref) {
+            const auto* compiler_obj = compiler_ref.as<GrammarCompilerObj>();
+            GrammarCompiler compiler = compiler_obj->value;
+            Testing_ClearRuleLevelCache(&compiler);
+          }
+      )
+      .def(
+          "xgrammar.tvm_ffi_binding.testing._profiling_get_rule_cache_size_bytes",
+          [](O compiler_ref) {
+            const auto* compiler_obj = compiler_ref.as<GrammarCompilerObj>();
+            return Testing_GetRuleLevelCacheSizeBytes(compiler_obj->value);
+          }
+      )
+      .def(
+          "xgrammar.tvm_ffi_binding.testing._profiling_get_grammar_cache_size_bytes",
+          [](O compiler_ref) {
+            const auto* compiler_obj = compiler_ref.as<GrammarCompilerObj>();
+            return Testing_GetGrammarLevelCacheSizeBytes(compiler_obj->value);
+          }
+      )
+      .def(
+          "xgrammar.tvm_ffi_binding.testing._profiling_get_stats_json",
+          [](O compiler_ref) {
+            const auto* compiler_obj = compiler_ref.as<GrammarCompilerObj>();
+            GrammarCompiler compiler = compiler_obj->value;
+            return ffi::String(Testing_GetProfilingStatsJSON(&compiler));
+          }
+      )
+      .def(
+          "xgrammar.tvm_ffi_binding.testing._profiling_reset_stats",
+          [](O compiler_ref) {
+            const auto* compiler_obj = compiler_ref.as<GrammarCompilerObj>();
+            GrammarCompiler compiler = compiler_obj->value;
+            Testing_ResetProfilingStats(&compiler);
+          }
+      )
+      .def(
+          "xgrammar.tvm_ffi_binding.testing._profiling_get_compiled_grammar_stats_json",
+          [](O compiled_grammar_ref) {
+            const auto* compiled_obj = compiled_grammar_ref.as<CompiledGrammarObj>();
+            return ffi::String(Testing_GetCompiledGrammarStatsJSON(compiled_obj->value));
+          }
+      )
+#endif
+      .def(
           "xgrammar.tvm_ffi_binding.testing._json_schema_to_ebnf",
           [](ffi::String schema,
              bool any_whitespace,
@@ -842,8 +893,10 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       )
       .def(
           "xgrammar.tvm_ffi_binding.testing._get_masked_tokens_from_bitmask",
-          [](int64_t token_bitmask_ptr, ffi::Array<int64_t> shape, int64_t vocab_size, int64_t index
-          ) {
+          [](int64_t token_bitmask_ptr,
+             ffi::Array<int64_t> shape,
+             int64_t vocab_size,
+             int64_t index) {
             std::vector<int64_t> shape_vector;
             for (int64_t i = 0; i < static_cast<int64_t>(shape.size()); ++i)
               shape_vector.push_back(shape[i]);
@@ -861,8 +914,10 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       )
       .def(
           "xgrammar.tvm_ffi_binding.testing._is_single_token_bitmask",
-          [](int64_t token_bitmask_ptr, ffi::Array<int64_t> shape, int64_t vocab_size, int64_t index
-          ) {
+          [](int64_t token_bitmask_ptr,
+             ffi::Array<int64_t> shape,
+             int64_t vocab_size,
+             int64_t index) {
             std::vector<int64_t> shape_vector;
             for (int64_t i = 0; i < static_cast<int64_t>(shape.size()); ++i)
               shape_vector.push_back(shape[i]);

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xgrammar.local/profile-result.schema.json",
+  "title": "XGrammar profiling result record",
+  "type": "object",
+  "required": ["schema_version", "record_type", "experiment", "status", "case_id", "block_id", "measured"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "record_type": {"enum": ["sample", "stream-summary", "guard", "validation", "diagnostic"]},
+    "experiment": {"enum": ["cache", "repetition", "watchdog", "validation"]},
+    "status": {"enum": ["success", "timeout", "rss_limit", "kernel_termination", "program_error", "invalid_output", "skipped"]},
+    "case_id": {"type": "string", "minLength": 1},
+    "block_id": {"type": "integer", "minimum": -3},
+    "measured": {"type": "boolean"},
+    "variant": {"type": ["string", "null"]},
+    "arm": {"type": ["string", "null"]},
+    "wall_time_ns": {"type": ["integer", "null"], "minimum": 0},
+    "cpu_time_ns": {"type": ["integer", "null"], "minimum": 0},
+    "compile_time_ns": {"type": ["integer", "null"], "minimum": 0},
+    "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "baseline_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "compiled_grammar_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "baseline_ready_observed": {"type": "boolean"},
+    "measurement_end_observed": {"type": "boolean"},
+    "measurement_end_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "measurement_completed_monotonic_ns": {"type": ["integer", "null"], "minimum": 0},
+    "config_hash": {"type": ["string", "null"]},
+    "variant_manifest_sha256": {"type": ["string", "null"]}
+    ,"workload_fingerprint": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+    ,"expected_request_count": {"type": ["integer", "null"], "minimum": 0}
+    ,"workload_class": {"type": ["string", "null"]}
+    ,"family": {"type": ["string", "null"]}
+    ,"bound": {"type": ["integer", "null"], "minimum": 1}
+    ,"cpu_affinity": {
+      "type": ["array", "null"],
+      "items": {"type": "integer", "minimum": 0},
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": true
+}

@@ -21,6 +21,34 @@ option(XGRAMMAR_ENABLE_CPPTRACE
 )
 option(XGRAMMAR_ENABLE_COVERAGE "Enable code coverage with gcov" OFF)
 option(XGRAMMAR_ENABLE_INTERNAL_CHECK "Enable internal checks" OFF)
+option(
+  XGRAMMAR_PROFILE_DISABLE_RULE_LEVEL_CACHE
+  "Profiling ablation: disable only the cross-grammar rule-level cache"
+  OFF
+)
+option(
+  XGRAMMAR_PROFILE_DISABLE_REPETITION_COMPRESSION
+  "Profiling ablation: expand bounded repetition ranges instead of compressing them"
+  OFF
+)
+option(
+  XGRAMMAR_ENABLE_PROFILING_API
+  "Enable private profiling hooks under xgrammar.testing"
+  OFF
+)
+option(
+  XGRAMMAR_ENABLE_PROFILING_STATS
+  "Enable diagnostic profiling counters (not for authoritative timings)"
+  OFF
+)
+
+# Diagnostic statistics are exposed through the private profiling API.
+if(XGRAMMAR_ENABLE_PROFILING_STATS AND NOT XGRAMMAR_ENABLE_PROFILING_API)
+  set(XGRAMMAR_ENABLE_PROFILING_API
+      ON
+      CACHE BOOL "Enable private profiling hooks under xgrammar.testing" FORCE
+  )
+endif()
 
 set(XGRAMMAR_CUDA_ARCHITECTURES
     native
@@ -44,6 +72,16 @@ message(STATUS "Build Python bindings: ${XGRAMMAR_BUILD_PYTHON_BINDINGS}")
 message(STATUS "Build C++ tests: ${XGRAMMAR_BUILD_CXX_TESTS}")
 message(STATUS "CUDA architectures: ${XGRAMMAR_CUDA_ARCHITECTURES}")
 message(STATUS "Enable C++ trace: ${XGRAMMAR_ENABLE_CPPTRACE}")
+message(
+  STATUS
+    "Profiling: disable rule-level cache: ${XGRAMMAR_PROFILE_DISABLE_RULE_LEVEL_CACHE}"
+)
+message(
+  STATUS
+    "Profiling: disable repetition compression: ${XGRAMMAR_PROFILE_DISABLE_REPETITION_COMPRESSION}"
+)
+message(STATUS "Profiling API: ${XGRAMMAR_ENABLE_PROFILING_API}")
+message(STATUS "Profiling diagnostic stats: ${XGRAMMAR_ENABLE_PROFILING_STATS}")
 
 if(MSVC)
   set(CMAKE_CXX_FLAGS "/Wall ${CMAKE_CXX_FLAGS}")
@@ -80,6 +118,20 @@ list(FILTER XGRAMMAR_SOURCES_PATH EXCLUDE REGEX "${PROJECT_SOURCE_DIR}/cpp/tvm_f
 add_library(xgrammar STATIC ${XGRAMMAR_SOURCES_PATH})
 target_include_directories(xgrammar PUBLIC include)
 target_include_directories(xgrammar SYSTEM PUBLIC ${XGRAMMAR_INCLUDE_PATH})
+
+foreach(
+  profiling_option
+  XGRAMMAR_PROFILE_DISABLE_RULE_LEVEL_CACHE
+  XGRAMMAR_PROFILE_DISABLE_REPETITION_COMPRESSION
+  XGRAMMAR_ENABLE_PROFILING_API
+  XGRAMMAR_ENABLE_PROFILING_STATS
+)
+  if(${profiling_option})
+    target_compile_definitions(xgrammar PUBLIC ${profiling_option}=1)
+  else()
+    target_compile_definitions(xgrammar PUBLIC ${profiling_option}=0)
+  endif()
+endforeach()
 
 # link to cpptrace
 if(XGRAMMAR_ENABLE_CPPTRACE)

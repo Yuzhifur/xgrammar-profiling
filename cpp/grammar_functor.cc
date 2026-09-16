@@ -8,6 +8,7 @@
 #include <xgrammar/xgrammar.h>
 
 #include <array>
+#include <atomic>
 #include <bitset>
 #include <cstdint>
 #include <map>
@@ -2162,6 +2163,15 @@ int32_t RepetitionRangeExpanderImpl::ExpandRepetitionRange(
   XGRAMMAR_CHECK(lower >= 0 && (upper == -1 || upper >= lower))
       << "Invalid repetition range {" << lower << ", " << upper << "}";
 
+#if XGRAMMAR_PROFILE_DISABLE_REPETITION_COMPRESSION
+  // Profiling ablation: retain HandleRepetitionRange's memoization, but route every bounded
+  // range through the pre-compression expansion.  Unbounded ranges are deliberately unchanged;
+  // they are a separate behavior and are outside the first repetition-compression experiment.
+  if (upper != -1) {
+    return LegacyHandleRepetitionRange(cur_rule_name, grammar_expr_id, lower, upper);
+  }
+#endif
+
   // Case 1.1 small upper (<=threshold), unzip the repetition.
   // Case 1.2 unbounded upper, and lower is also small (<=threshold), unzip the lower part.
   if ((upper != -1 && upper <= kUnzipThreshold) || (upper == -1 && lower <= kUnzipThreshold)) {
@@ -3519,7 +3529,8 @@ class RuleLevelCache::Impl {
       const uint64_t& fsm_hash,
       int32_t fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt
+      const int32_t edge_cnt,
+      uint64_t compile_epoch
   );
 
   bool AddCache(
@@ -3527,7 +3538,8 @@ class RuleLevelCache::Impl {
       int32_t fsm_new_node_id,
       const int32_t& state_cnt,
       const int32_t edge_cnt,
-      const AdaptiveTokenMask& token_mask
+      const AdaptiveTokenMask& token_mask,
+      uint64_t compile_epoch
   );
 
   bool AddCache(
@@ -3535,15 +3547,27 @@ class RuleLevelCache::Impl {
       int32_t fsm_new_node_id,
       const int32_t& state_cnt,
       const int32_t edge_cnt,
-      AdaptiveTokenMask&& token_mask
+      AdaptiveTokenMask&& token_mask,
+      uint64_t compile_epoch
   );
 
   void ClearCache();
 
+#if XGRAMMAR_ENABLE_PROFILING_API
+  RuleLevelCacheProfilingSnapshot GetProfilingSnapshot() const;
+  void ResetProfilingStats();
+#endif
+
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  void RecordPerfectHit() { perfect_hits_.fetch_add(1, std::memory_order_relaxed); }
+  void RecordBasicHit() { basic_hits_.fetch_add(1, std::memory_order_relaxed); }
+#endif
+
   friend size_t MemorySize(const Impl* impl) {
-    int64_t total = 0;
+    size_t total = 0;
     for (const auto& shard : impl->shards_) {
-      total += shard.current_cache_memory_size;
+      std::lock_guard<std::mutex> lock(shard.mutex);
+      total += static_cast<size_t>(shard.current_cache_memory_size);
     }
     return total;
   }
@@ -3556,14 +3580,18 @@ class RuleLevelCache::Impl {
    * queries and inserts from all compilation threads, and a single global mutex would serialize
    * them (large grammars issue millions of cache operations).
    */
-  static constexpr size_t kNumShards = 16;
+  static constexpr size_t kNumShards = kRuleLevelCacheShardCount;
 
   struct Shard {
-    std::mutex mutex;
+    mutable std::mutex mutex;
     int64_t current_cache_memory_size = 0;
     // The cache map: (fsm_hash, node_id, ...) -> index in cache_list
     List<NodeType> cache_list;
     std::unordered_map<NodeKey, int> cache;
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+    std::unordered_map<NodeKey, uint64_t> insertion_epochs;
+    std::atomic<uint64_t> evictions{0};
+#endif
   };
 
   Shard& GetShard(const NodeKey& key) {
@@ -3578,15 +3606,28 @@ class RuleLevelCache::Impl {
 
   const size_t max_cache_memory_size_;
   std::array<Shard, kNumShards> shards_;
+
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  std::atomic<uint64_t> lookups_{0};
+  std::atomic<uint64_t> misses_{0};
+  std::atomic<uint64_t> perfect_hits_{0};
+  std::atomic<uint64_t> basic_hits_{0};
+  std::atomic<uint64_t> same_compile_hits_{0};
+  std::atomic<uint64_t> prior_compile_hits_{0};
+  std::atomic<uint64_t> insertions_{0};
+  std::atomic<uint64_t> duplicate_insertions_{0};
+  std::atomic<uint64_t> oversized_rejections_{0};
+#endif
 };
 
 std::optional<AdaptiveTokenMask> RuleLevelCache::GetCache(
     const uint64_t& fsm_hash,
     int32_t fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt
+    const int32_t edge_cnt,
+    uint64_t compile_epoch
 ) {
-  return pimpl_->GetCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
+  return pimpl_->GetCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, compile_epoch);
 }
 
 bool RuleLevelCache::AddCache(
@@ -3594,9 +3635,12 @@ bool RuleLevelCache::AddCache(
     int32_t fsm_new_node_id,
     const int32_t& state_cnt,
     const int32_t edge_cnt,
-    const AdaptiveTokenMask& token_mask
+    const AdaptiveTokenMask& token_mask,
+    uint64_t compile_epoch
 ) {
-  return pimpl_->AddCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, token_mask);
+  return pimpl_->AddCache(
+      fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, token_mask, compile_epoch
+  );
 }
 
 bool RuleLevelCache::AddCache(
@@ -3604,29 +3648,63 @@ bool RuleLevelCache::AddCache(
     int32_t fsm_new_node_id,
     const int32_t& state_cnt,
     const int32_t edge_cnt,
-    AdaptiveTokenMask&& token_mask
+    AdaptiveTokenMask&& token_mask,
+    uint64_t compile_epoch
 ) {
-  return pimpl_->AddCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, std::move(token_mask));
+  return pimpl_->AddCache(
+      fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, std::move(token_mask), compile_epoch
+  );
 }
 
 void RuleLevelCache::ClearCache() { pimpl_->ClearCache(); }
 
 size_t RuleLevelCache::GetMaxSize() const { return pimpl_->GetMaxSize(); }
 
+#if XGRAMMAR_ENABLE_PROFILING_API
+RuleLevelCacheProfilingSnapshot RuleLevelCache::GetProfilingSnapshot() const {
+  return pimpl_->GetProfilingSnapshot();
+}
+
+void RuleLevelCache::ResetProfilingStats() { pimpl_->ResetProfilingStats(); }
+#endif
+
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+void RuleLevelCache::RecordPerfectHit() { pimpl_->RecordPerfectHit(); }
+
+void RuleLevelCache::RecordBasicHit() { pimpl_->RecordBasicHit(); }
+#endif
+
 std::optional<AdaptiveTokenMask> RuleLevelCache::Impl::GetCache(
     const uint64_t& fsm_hash,
     int32_t fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt
+    const int32_t edge_cnt,
+    uint64_t compile_epoch
 ) {
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  lookups_.fetch_add(1, std::memory_order_relaxed);
+#endif
   // Find in the cache.
   NodeKey key = std::make_tuple(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
   Shard& shard = GetShard(key);
   std::lock_guard<std::mutex> lock(shard.mutex);
   auto it = shard.cache.find(key);
   if (it == shard.cache.end()) {
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+    misses_.fetch_add(1, std::memory_order_relaxed);
+#endif
     return std::nullopt;
   }
+
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  auto epoch_it = shard.insertion_epochs.find(key);
+  XGRAMMAR_DCHECK(epoch_it != shard.insertion_epochs.end());
+  if (epoch_it->second == compile_epoch) {
+    same_compile_hits_.fetch_add(1, std::memory_order_relaxed);
+  } else {
+    prior_compile_hits_.fetch_add(1, std::memory_order_relaxed);
+  }
+#endif
 
   // Move the node to the back of the list.
   shard.cache_list.MoveBack(it->second);
@@ -3638,9 +3716,12 @@ bool RuleLevelCache::Impl::AddCache(
     int32_t fsm_new_node_id,
     const int32_t& state_cnt,
     const int32_t edge_cnt,
-    const AdaptiveTokenMask& token_mask
+    const AdaptiveTokenMask& token_mask,
+    uint64_t compile_epoch
 ) {
-  return AddCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, AdaptiveTokenMask(token_mask));
+  return AddCache(
+      fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, AdaptiveTokenMask(token_mask), compile_epoch
+  );
 }
 
 bool RuleLevelCache::Impl::AddCache(
@@ -3648,7 +3729,8 @@ bool RuleLevelCache::Impl::AddCache(
     int32_t fsm_new_node_id,
     const int32_t& state_cnt,
     const int32_t edge_cnt,
-    AdaptiveTokenMask&& token_mask
+    AdaptiveTokenMask&& token_mask,
+    uint64_t compile_epoch
 ) {
   // Check if we can add to the cache.
   NodeKey key = std::make_tuple(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
@@ -3657,10 +3739,16 @@ bool RuleLevelCache::Impl::AddCache(
   std::lock_guard<std::mutex> lock(shard.mutex);
   if (shard_max_size != kUnlimitedSize && MemorySize(token_mask) > shard_max_size) {
     // The token mask is too large to be cached.
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+    oversized_rejections_.fetch_add(1, std::memory_order_relaxed);
+#endif
     return false;
   }
   if (shard.cache.find(key) != shard.cache.end()) {
     // Already exists.
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+    duplicate_insertions_.fetch_add(1, std::memory_order_relaxed);
+#endif
     return false;
   }
 
@@ -3676,6 +3764,10 @@ bool RuleLevelCache::Impl::AddCache(
         break;
       }
       shard.current_cache_memory_size -= MemorySize(oldest_it->second);
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+      shard.insertion_epochs.erase(oldest_it->first);
+      shard.evictions.fetch_add(1, std::memory_order_relaxed);
+#endif
       shard.cache.erase(oldest_it->first);
       shard.cache_list.Erase(oldest_it);
     }
@@ -3685,6 +3777,10 @@ bool RuleLevelCache::Impl::AddCache(
   auto new_it = shard.cache_list.PushBack(NodeType(key, std::move(token_mask)));
   shard.current_cache_memory_size += MemorySize(new_it->second);
   shard.cache[key] = new_it.Index();
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  shard.insertion_epochs[key] = compile_epoch;
+  insertions_.fetch_add(1, std::memory_order_relaxed);
+#endif
   return true;
 }
 
@@ -3697,8 +3793,60 @@ void RuleLevelCache::Impl::ClearCache() {
     shard.cache_list.Clear();
     shard.cache.clear();
     shard.current_cache_memory_size = 0;
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+    shard.insertion_epochs.clear();
+#endif
   }
 }
+
+#if XGRAMMAR_ENABLE_PROFILING_API
+RuleLevelCacheProfilingSnapshot RuleLevelCache::Impl::GetProfilingSnapshot() const {
+  RuleLevelCacheProfilingSnapshot result;
+  result.max_bytes = max_cache_memory_size_;
+  for (size_t shard_index = 0; shard_index < shards_.size(); ++shard_index) {
+    const auto& shard = shards_[shard_index];
+    std::lock_guard<std::mutex> lock(shard.mutex);
+    result.shard_bytes[shard_index] = static_cast<size_t>(shard.current_cache_memory_size);
+    result.shard_entries[shard_index] = shard.cache.size();
+    result.bytes += result.shard_bytes[shard_index];
+    result.entries += result.shard_entries[shard_index];
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+    result.shard_evictions[shard_index] = shard.evictions.load(std::memory_order_relaxed);
+    result.evictions += result.shard_evictions[shard_index];
+#endif
+  }
+
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  result.lookups = lookups_.load(std::memory_order_relaxed);
+  result.misses = misses_.load(std::memory_order_relaxed);
+  result.perfect_hits = perfect_hits_.load(std::memory_order_relaxed);
+  result.basic_hits = basic_hits_.load(std::memory_order_relaxed);
+  result.same_compile_hits = same_compile_hits_.load(std::memory_order_relaxed);
+  result.prior_compile_hits = prior_compile_hits_.load(std::memory_order_relaxed);
+  result.insertions = insertions_.load(std::memory_order_relaxed);
+  result.duplicate_insertions = duplicate_insertions_.load(std::memory_order_relaxed);
+  result.oversized_rejections = oversized_rejections_.load(std::memory_order_relaxed);
+#endif
+  return result;
+}
+
+void RuleLevelCache::Impl::ResetProfilingStats() {
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  lookups_.store(0, std::memory_order_relaxed);
+  misses_.store(0, std::memory_order_relaxed);
+  perfect_hits_.store(0, std::memory_order_relaxed);
+  basic_hits_.store(0, std::memory_order_relaxed);
+  same_compile_hits_.store(0, std::memory_order_relaxed);
+  prior_compile_hits_.store(0, std::memory_order_relaxed);
+  insertions_.store(0, std::memory_order_relaxed);
+  duplicate_insertions_.store(0, std::memory_order_relaxed);
+  oversized_rejections_.store(0, std::memory_order_relaxed);
+  for (auto& shard : shards_) {
+    shard.evictions.store(0, std::memory_order_relaxed);
+  }
+#endif
+}
+#endif
 
 size_t MemorySize(const RuleLevelCache& manager) { return MemorySize(manager.ImplPtr()); }
 

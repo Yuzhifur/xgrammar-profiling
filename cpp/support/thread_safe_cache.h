@@ -19,6 +19,10 @@
 
 #include "container.h"
 
+#ifndef XGRAMMAR_ENABLE_PROFILING_STATS
+#define XGRAMMAR_ENABLE_PROFILING_STATS 0
+#endif
+
 namespace xgrammar {
 
 /*!
@@ -238,6 +242,7 @@ class LRUCacheImpl {
   }
 
   std::unordered_map<Key, Entry>& GetMap() { return map_; }
+  const std::unordered_map<Key, Entry>& GetMap() const { return map_; }
 
  private:
   std::unordered_map<Key, Entry> map_;
@@ -280,6 +285,20 @@ class ThreadSafeLRUCache {
 
   std::size_t MaxMemorySize() const { return max_size_; }
   std::size_t MemorySize() const { return current_size_; }
+
+  /*! \brief Return the number of cache keys. Used by the private profiling API. */
+  std::size_t EntryCount() const {
+    const auto lock_map = std::shared_lock{map_mutex_};
+    return cache_.GetMap().size();
+  }
+
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  std::size_t ProfilingEvictionCount() const {
+    return profiling_evictions_.load(std::memory_order_relaxed);
+  }
+
+  void ResetProfilingStats() { profiling_evictions_.store(0, std::memory_order_relaxed); }
+#endif
 
   Value Get(const Key& key) {
     auto future = GetFuture(key);
@@ -350,6 +369,9 @@ class ThreadSafeLRUCache {
           } catch (...) {
             // fine, just ignore the exception, size is not updated
           }
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+          profiling_evictions_.fetch_add(1, std::memory_order_relaxed);
+#endif
           return true;
         }
     );
@@ -395,8 +417,11 @@ class ThreadSafeLRUCache {
   const SizeEstimator size_estimator_;
   details::LRUCacheImpl<Key, std::shared_future<SizedValue>> cache_;
   std::atomic_size_t current_size_{0};
-  std::shared_mutex map_mutex_;
+  mutable std::shared_mutex map_mutex_;
   std::mutex lru_mutex_;
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  std::atomic_size_t profiling_evictions_{0};
+#endif
 };
 
 }  // namespace xgrammar

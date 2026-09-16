@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "generated": false,
+  "release_commit": "82505d0d987c36a4209fb3d8571cf6b0f28b5acd",
+  "tokenizer": {
+    "repository": "Qwen/Qwen3-0.6B",
+    "revision": "c916fa4defd319b7d4e4da17604ca7338f4d99f5",
+    "snapshot": null
+  },
+  "bfcl": {
+    "repository": "https://github.com/ShishirPatil/gorilla.git",
+    "revision": null,
+    "snapshot": null
+  },
+  "note": "Prepared snapshot directories contain generated manifests and hashes; this committed file is the immutable acquisition contract."
+}
+

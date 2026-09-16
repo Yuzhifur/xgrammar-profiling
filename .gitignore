@@ -258,6 +258,15 @@ patched.txt
 .pyre/
 
 # pipenv files
+
+# XGrammar profiling: generated environments, builds, downloaded snapshots, and run artifacts.
+/profiling/.venv/
+/profiling/build/
+/profiling/data/tokenizer/
+/profiling/data/bfcl/
+/profiling/results/*
+!/profiling/results/.gitignore
+/profiling/perf.data*
 Pipfile
 Pipfile.lock
 

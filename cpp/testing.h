@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "profiling.h"
+
 namespace xgrammar {
 
 std::string PrintTokenByIds(
@@ -24,6 +26,26 @@ Grammar _EBNFToGrammarNoNormalization(
 );
 
 std::string _PrintGrammarFSMs(const Grammar& grammar);
+
+/*! \brief Return the profiling CMake configuration as JSON. Always available for discovery. */
+std::string Testing_GetProfilingBuildConfigJSON();
+
+#if XGRAMMAR_ENABLE_PROFILING_API
+/*! \brief Clear only the rule-level cache, preserving the exact whole-grammar LRU. */
+void Testing_ClearRuleLevelCache(GrammarCompiler* compiler);
+
+int64_t Testing_GetRuleLevelCacheSizeBytes(const GrammarCompiler& compiler);
+
+int64_t Testing_GetGrammarLevelCacheSizeBytes(const GrammarCompiler& compiler);
+
+/*! \brief Return cache state and diagnostic counters as JSON. */
+std::string Testing_GetProfilingStatsJSON(GrammarCompiler* compiler);
+
+void Testing_ResetProfilingStats(GrammarCompiler* compiler);
+
+/*! \brief Return compiled grammar structure counts as JSON. */
+std::string Testing_GetCompiledGrammarStatsJSON(const CompiledGrammar& compiled_grammar);
+#endif
 
 }  // namespace xgrammar
 

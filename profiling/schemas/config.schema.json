@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xgrammar.local/profile-config.schema.json",
+  "title": "XGrammar profiling configuration",
+  "type": "object",
+  "required": ["schema_version", "source", "tokenizer", "variants", "cache", "repetition", "execution", "sampling"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source": {
+      "type": "object",
+      "required": ["release_commit"],
+      "properties": {"release_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}
+    },
+    "tokenizer": {
+      "type": "object",
+      "required": ["repository", "revision", "snapshot_dir"],
+      "properties": {
+        "repository": {"type": "string"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "snapshot_dir": {"type": "string"}
+      }
+    },
+    "variants": {
+      "type": "object",
+      "required": ["root", "required"],
+      "properties": {
+        "root": {"type": "string"},
+        "required": {"type": "array", "items": {"type": "string"}, "minItems": 3, "uniqueItems": true}
+      }
+    },
+    "cache": {
+      "type": "object",
+      "required": ["tools_per_request", "seen_before_fractions", "requests_per_stream", "cache_limit_bytes", "compiler_threads", "seed"],
+      "properties": {
+        "tools_per_request": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+        "seen_before_fractions": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}},
+        "requests_per_stream": {"type": "integer", "minimum": 1},
+        "cache_limit_bytes": {"type": "integer", "minimum": 1},
+        "compiler_threads": {"type": "integer", "minimum": 1},
+        "seed": {"type": "integer"}
+      }
+    },
+    "repetition": {
+      "type": "object",
+      "required": ["families", "bounds", "focused_families", "focused_bounds"],
+      "properties": {
+        "families": {"type": "array", "items": {"type": "string"}},
+        "bounds": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+        "focused_families": {"type": "array", "items": {"type": "string"}},
+        "focused_bounds": {"type": "array", "items": {"type": "integer", "minimum": 1}}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["timeout_seconds", "rss_limit_bytes", "rss_poll_interval_seconds", "termination_grace_seconds"],
+      "properties": {
+        "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 300},
+        "rss_limit_bytes": {"type": "integer", "minimum": 33554432},
+        "rss_poll_interval_seconds": {"type": "number", "minimum": 0.01, "maximum": 5},
+        "termination_grace_seconds": {"type": "number", "minimum": 0, "maximum": 30}
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "required": ["warmup_blocks", "minimum_blocks", "maximum_blocks", "relative_ci_half_width", "bootstrap_resamples", "bootstrap_seed"],
+      "properties": {
+        "warmup_blocks": {"type": "integer", "minimum": 0},
+        "minimum_blocks": {"type": "integer", "minimum": 1},
+        "maximum_blocks": {"type": "integer", "minimum": 1},
+        "relative_ci_half_width": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "bootstrap_resamples": {"type": "integer", "minimum": 100},
+        "bootstrap_seed": {"type": "integer"}
+      }
+    },
+    "frozen": {"type": "boolean"},
+    "config_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": true
+}
+

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "study": "xgrammar-v0.2.7-pilot",
+  "authoritative_config": "profiling/configs/v0.2.7.json",
+  "source": {
+    "release_commit": "82505d0d987c36a4209fb3d8571cf6b0f28b5acd"
+  },
+  "tokenizer": {
+    "repository": "Qwen/Qwen3-0.6B",
+    "revision": "c916fa4defd319b7d4e4da17604ca7338f4d99f5",
+    "snapshot_dir": "profiling/data/tokenizer"
+  },
+  "bfcl": {
+    "snapshot_dir": "profiling/data/bfcl",
+    "enabled": false,
+    "trace_requests": 3
+  },
+  "variants": {
+    "root": "profiling/build/variants",
+    "required": [
+      "production-profile",
+      "no-rule-cache",
+      "no-repeat-compression"
+    ]
+  },
+  "cache": {
+    "tools_per_request": [10],
+    "seen_before_fractions": [0.0, 0.5],
+    "requests_per_stream": 3,
+    "cache_limit_bytes": 536870912,
+    "compiler_threads": 1,
+    "seed": 270227,
+    "secondary": {"enabled": false}
+  },
+  "repetition": {
+    "families": ["json-string", "regex-range"],
+    "bounds": [127, 128, 129, 130, 1024],
+    "focused_families": [],
+    "focused_bounds": []
+  },
+  "execution": {
+    "timeout_seconds": 120,
+    "rss_limit_bytes": 6442450944,
+    "rss_poll_interval_seconds": 0.05,
+    "termination_grace_seconds": 5
+  },
+  "sampling": {
+    "warmup_blocks": 0,
+    "minimum_blocks": 1,
+    "maximum_blocks": 1,
+    "relative_ci_half_width": 0.05,
+    "bootstrap_resamples": 1000,
+    "bootstrap_seed": 270227
+  },
+  "pilot": {
+    "sentinel_duration_seconds": 900,
+    "sentinel_max_coefficient_of_variation": 0.10,
+    "resource_gate_timeout_seconds": 30,
+    "resource_gate_rss_bytes": 4294967296,
+    "remaining_run_budget_seconds": 21600
+  },
+  "results_root": "profiling/results"
+}

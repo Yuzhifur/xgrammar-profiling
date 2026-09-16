@@ -3,6 +3,7 @@
 The APIs in this module are used for testing and debugging and are prone to
 change. Don't use them in production."""
 
+import json
 import time
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
@@ -14,6 +15,65 @@ from .compiler import CompiledGrammar, GrammarCompiler
 from .grammar import Grammar, _convert_schema_to_str
 from .matcher import GrammarMatcher, bitmask_dtype
 from .tokenizer_info import TokenizerInfo
+
+
+def get_profiling_build_config() -> Dict[str, bool]:
+    """Return the compile-time configuration of the private profiling controls."""
+    return dict(json.loads(str(_core.testing._profiling_build_config())))
+
+
+def _require_profiling_api() -> None:
+    if not get_profiling_build_config()["XGRAMMAR_ENABLE_PROFILING_API"]:
+        raise RuntimeError(
+            "This XGrammar build does not include the private profiling API. "
+            "Rebuild with -DXGRAMMAR_ENABLE_PROFILING_API=ON."
+        )
+
+
+def clear_rule_level_cache(compiler: GrammarCompiler) -> None:
+    """Clear the rule-level cache without clearing the exact whole-grammar cache."""
+    _require_profiling_api()
+    _core.testing._profiling_clear_rule_level_cache(compiler._handle)
+
+
+def get_rule_cache_size_bytes(compiler: GrammarCompiler) -> int:
+    """Return approximate bytes held by the rule-level cache alone."""
+    _require_profiling_api()
+    return int(_core.testing._profiling_get_rule_cache_size_bytes(compiler._handle))
+
+
+def get_grammar_cache_size_bytes(compiler: GrammarCompiler) -> int:
+    """Return approximate bytes held by the exact whole-grammar cache alone."""
+    _require_profiling_api()
+    return int(_core.testing._profiling_get_grammar_cache_size_bytes(compiler._handle))
+
+
+def get_profiling_stats(compiler: GrammarCompiler) -> Dict[str, Any]:
+    """Return cache state and, in a stats build, diagnostic counters."""
+    _require_profiling_api()
+    return dict(
+        json.loads(str(_core.testing._profiling_get_stats_json(compiler._handle)))
+    )
+
+
+def reset_profiling_stats(compiler: GrammarCompiler) -> None:
+    """Reset diagnostic counters without clearing either cache."""
+    _require_profiling_api()
+    _core.testing._profiling_reset_stats(compiler._handle)
+
+
+def get_compiled_grammar_stats(compiled_grammar: CompiledGrammar) -> Dict[str, int]:
+    """Return structure and adaptive-mask counts for a compiled grammar."""
+    _require_profiling_api()
+    return dict(
+        json.loads(
+            str(
+                _core.testing._profiling_get_compiled_grammar_stats_json(
+                    compiled_grammar._handle
+                )
+            )
+        )
+    )
 
 
 def _json_schema_to_ebnf(

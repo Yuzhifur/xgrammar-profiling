@@ -17,6 +17,7 @@
 #include "compiled_grammar_impl.h"
 #include "grammar_builder.h"
 #include "grammar_impl.h"
+#include "profiling.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
 
@@ -478,27 +479,40 @@ class RuleLevelCache {
       const uint64_t& fsm_hash,
       int32_t fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt
+      const int32_t edge_cnt,
+      uint64_t compile_epoch = 0
   );
   bool AddCache(
       const uint64_t& fsm_hash,
       int32_t fsm_new_node_id,
       const int32_t& state_cnt,
       const int32_t edge_cnt,
-      const AdaptiveTokenMask& token_mask
+      const AdaptiveTokenMask& token_mask,
+      uint64_t compile_epoch = 0
   );
   bool AddCache(
       const uint64_t& fsm_hash,
       int32_t fsm_new_node_id,
       const int32_t& state_cnt,
       const int32_t edge_cnt,
-      AdaptiveTokenMask&& token_mask
+      AdaptiveTokenMask&& token_mask,
+      uint64_t compile_epoch = 0
   );
   RuleLevelCache(size_t max_cache_memory_size = kUnlimitedSize);
 
   void ClearCache();
 
   size_t GetMaxSize() const;
+
+#if XGRAMMAR_ENABLE_PROFILING_API
+  RuleLevelCacheProfilingSnapshot GetProfilingSnapshot() const;
+  void ResetProfilingStats();
+#endif
+
+#if XGRAMMAR_ENABLE_PROFILING_STATS
+  void RecordPerfectHit();
+  void RecordBasicHit();
+#endif
 
   friend size_t MemorySize(const RuleLevelCache& manager);
 
