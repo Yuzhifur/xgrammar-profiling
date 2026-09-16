@@ -35,10 +35,16 @@ Use `--local-source DIR` when an already acquired, verified tokenizer-only direc
 - Revision: selected before the pilot and required to be an immutable 40-hex commit
 - Generated directory: `profiling/data/bfcl/`
 
-BFCL is a realistic validation subset, not the primary controlled workload. Preparation normalizes
-supported OpenAI-style function definitions deterministically and records every accepted or
-rejected entry plus its reason. It refuses a moving branch name. Do not duplicate tools to fill a
-cell when the pinned source has too few supported entries.
+BFCL is a realistic validation subset, not the primary controlled workload. The source corpus uses
+BFCL's Gorilla schema dialect (`dict`, `float`, `list`, dotted function names, and related aliases),
+so preparation applies the pinned `GORILLA_TO_OPENAPI` / `ModelStyle.OSSMODEL` semantics to the
+OpenAI function fields, explicitly projects `name`, `description`, and `parameters` (excluding
+BFCL-only fields such as `response`), and wraps that projection as a function tool for XGrammar.
+The BFCL manifest records the reviewed upstream revision, source paths, Git blob IDs, file hashes,
+complete type map, projection, contract hash, and applied conversion/projection counters.
+Preparation then records every accepted or rejected entry plus its reason. It refuses a moving
+branch name. Do not duplicate tools to fill a cell when the pinned source has too few supported
+entries.
 
 ```bash
 python -m xgrammar_profile.cli prepare-bfcl \

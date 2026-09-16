@@ -351,9 +351,13 @@ Each resulting Structural Tag JSON string is materialized before timing. Only
 BFCL is an external-validity dataset, not the controlled causal workload. The preparation command
 uses the official `ShishirPatil/gorilla` source, requires an immutable 40-character revision, writes
 it to `data/manifest.json`, normalizes
-OpenAI-style function definitions deterministically, and records accepted/rejected entries with a
-reason. It refuses a branch name such as `main`. The authoritative run uses the exact prepared
-snapshot; later BFCL updates cannot change it. BFCL publishes the data under
+function definitions deterministically using BFCL's pinned `GORILLA_TO_OPENAPI` semantics for the
+`OSSMODEL` target, projects the OpenAI `name`, `description`, and `parameters` fields (excluding
+BFCL-only metadata such as `response`), wraps that projection as OpenAI function tools, and records
+accepted/rejected entries with a reason. Its manifest binds the reviewed conversion source files,
+complete mapping, explicit projection, and data revision. It refuses a branch name such as `main`.
+The authoritative run uses the exact prepared snapshot; later BFCL updates cannot change it. BFCL
+publishes the data under
 `berkeley-function-call-leaderboard/bfcl_eval/data` in its
 [repository](https://github.com/ShishirPatil/gorilla/tree/main/berkeley-function-call-leaderboard/bfcl_eval/data).
 
