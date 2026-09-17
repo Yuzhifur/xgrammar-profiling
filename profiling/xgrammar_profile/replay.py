@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import statistics
+import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List
+from typing import Any, Callable, Dict, Iterable, Iterator, List
 
 
 class ProfilingCapabilityError(RuntimeError):
@@ -29,6 +31,25 @@ def current_rss_bytes() -> int:
         except (FileNotFoundError, PermissionError, ValueError):
             pass
     return 0
+
+
+@contextlib.contextmanager
+def worker_stdout_guard() -> Iterator[None]:
+    """Route every stdout write made inside the block to stderr.
+
+    Worker stdout is parsed as JSONL evidence.  A stray library print, whether from Python
+    or from native code, would otherwise turn a valid measurement into a fatal
+    ``invalid_output`` outcome for the entire run.
+    """
+    sys.stdout.flush()
+    saved = os.dup(1)
+    try:
+        os.dup2(2, 1)
+        yield
+    finally:
+        sys.stdout.flush()
+        os.dup2(saved, 1)
+        os.close(saved)
 
 
 def baseline_handshake(job: Dict[str, Any], baseline_rss_bytes: int) -> None:

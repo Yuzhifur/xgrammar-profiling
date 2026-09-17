@@ -44,6 +44,12 @@ class GuardResult:
         return asdict(self)
 
 
+# After the supervisor acknowledges the final retained-RSS sample the measurement is
+# already complete.  Allow a generous exit window so a slow interpreter teardown of a large
+# grammar cannot turn a valid sample into a fatal program_error.
+POST_MEASUREMENT_EXIT_GRACE_SECONDS = 60.0
+
+
 class _CgroupScope:
     def __init__(self, limit_bytes: int):
         self.path: Path | None = None
@@ -290,7 +296,9 @@ def run_guarded(
                     break
                 if measurement_end_ack_path is not None:
                     measurement_end_ack_path.write_text("ack\n", encoding="ascii")
-                drain_seconds = max(1.0, 2 * poll_interval_seconds, grace_seconds)
+                drain_seconds = max(
+                    POST_MEASUREMENT_EXIT_GRACE_SECONDS, 2 * poll_interval_seconds, grace_seconds
+                )
                 post_end_deadline_ns = time.monotonic_ns() + int(drain_seconds * 1e9)
             if last > rss_limit_bytes:
                 requested = "rss_limit"

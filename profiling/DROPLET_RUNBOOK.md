@@ -347,8 +347,9 @@ export RUN_DIR="$REPO_ROOT/profiling/results/authoritative-$SESSION_ID"
 profiling/scripts/run_suite.sh run "$FROZEN_CONFIG" "$RUN_DIR"
 ```
 
-The order is controlled cache streams, declared cache controls/sweeps, BFCL traces, repetition
-cases, then diagnostics. Ordinary cells use at least seven fresh-process blocks and can continue to
+The order is the unmeasured diagnostics first (so a failure there costs minutes, not the timing
+matrix), then controlled cache streams, declared cache controls/sweeps, BFCL traces, and
+repetition cases. Ordinary cells use at least seven fresh-process blocks and can continue to
 twenty under the frozen paired-CI rule. Large explicit cases use three confirmation attempts when
 censored. Expected timeout and RSS guard outcomes remain in raw JSONL. The runner records
 `/proc/stat` steal-time snapshots around each worker and retains flagged samples.

@@ -19,6 +19,7 @@ from xgrammar_profile.replay import (
     measurement_end_handshake,
     profiling_snapshot,
     serialize_structural_tag,
+    worker_stdout_guard,
 )
 from xgrammar_profile.tokenizer_snapshot import load_tokenizer_info
 
@@ -157,9 +158,18 @@ def main() -> int:
     parser.add_argument("--job", required=True, type=Path)
     args = parser.parse_args()
     job = json.loads(args.job.read_text(encoding="utf-8"))
-    try:
-        records = run(job)
-    except Exception as exc:
+    records: List[Dict[str, Any]] = []
+    failure: Dict[str, Any] | None = None
+    with worker_stdout_guard():
+        try:
+            records = run(job)
+        except Exception as exc:
+            failure = {
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "traceback": traceback.format_exc()[-8000:],
+            }
+    if failure is not None:
         record = record_base(job, "sample", "program_error")
         record.update(
             {
@@ -169,9 +179,7 @@ def main() -> int:
                 "peak_rss_bytes": None,
                 "baseline_rss_bytes": current_rss_bytes(),
                 "compiled_grammar_bytes": None,
-                "error_type": type(exc).__name__,
-                "error": str(exc),
-                "traceback": traceback.format_exc()[-8000:],
+                **failure,
             }
         )
         print(json.dumps(record, sort_keys=True, separators=(",", ":")), flush=True)

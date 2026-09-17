@@ -63,6 +63,12 @@ class SuiteError(RuntimeError):
     pass
 
 
+def _log(message: str) -> None:
+    """Operator progress line on stderr; never part of any evidence file."""
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"[xgrammar-profile {timestamp}] {message}", file=sys.stderr, flush=True)
+
+
 CACHE_VARIANTS = {
     "rule-off": "no-rule-cache",
     "intra-only": "production-profile",
@@ -340,6 +346,18 @@ def _dispatch(
         execution=dict(config["execution"]),
         metadata=_metadata(job, config, variant),
     )
+    canonical_statuses = [
+        record.get("status")
+        for record in records
+        if record.get("record_type") in {"sample", "stream-summary"}
+    ]
+    guard = next((record for record in records if record.get("record_type") == "guard"), {})
+    _log(
+        f"job {sequence:06d} {job['case_id']} arm={job['arm']} block={job['block_id']} "
+        f"measured={job['measured']} status={canonical_statuses[-1] if canonical_statuses else None} "
+        f"wall={(guard.get('wall_time_ns') or 0) / 1e9:.1f}s "
+        f"steal_flagged={bool(guard.get('steal_flagged'))}"
+    )
     fatal = [
         record
         for record in records
@@ -516,6 +534,11 @@ def execute_suite(
                     "cpu_affinity": [primary_cpu],
                 }
             )
+    _log(
+        f"matrix: {len(cache_cells)} cache cells x 3 arms, "
+        f"{len(cases_from_config(config))} repetition cases x 2 arms, "
+        f"warmup={warmups} min_blocks={minimum} max_blocks={maximum}"
+    )
     for cell in cache_cells:
         tool_count = cell["tools"]
         reuse = cell["reuse"]
@@ -609,6 +632,10 @@ def execute_suite(
                     seed=int(sampling["bootstrap_seed"]),
                 ):
                     break
+        _log(
+            f"cell {case_id} done: measured_blocks={block_id + 1} "
+            f"successes={success_counts} terminal_censors={terminal}"
+        )
 
     for case in cases_from_config(config):
         terminal = {arm: 0 for arm in REPETITION_VARIANTS}
@@ -665,6 +692,11 @@ def execute_suite(
                     seed=int(sampling["bootstrap_seed"]),
                 ):
                     break
+        _log(
+            f"cell {case.case_id} done: measured_blocks={block_id + 1} "
+            f"successes={success_counts} terminal_censors={terminal}"
+        )
+    _log(f"timing matrix done; steal reruns queued: {len(steal_reruns)}")
     # A noisy sample is retained as measured evidence and rerun exactly once at the end.
     # Reruns are diagnostic (`measured=false`) so they cannot silently replace observations.
     for job, variant in steal_reruns:
@@ -684,6 +716,7 @@ def execute_diagnostics(
     initialize_jsonl(raw_path)
     records: List[Dict[str, Any]] = []
     sequence = 10_000_000
+    _log("diagnostics starting (every diagnostic job must succeed)")
     primary_cpu = int(config["execution"]["primary_cpu"])
     tokenizer = load_hf_tokenizer(snapshot)
 
@@ -1594,8 +1627,13 @@ def run_authoritative(
         run_dir / "variant-manifests.json",
         {name: variant.manifest for name, variant in variants.items()},
     )
-    records = execute_suite(config, run_dir, variants, snapshot)
-    records.extend(execute_diagnostics(config, run_dir, variants, snapshot))
+    _log(f"authoritative run starting: {run_dir}")
+    # Diagnostics are unmeasured mechanism/replay jobs.  They run first so a failure in
+    # that stage costs minutes rather than a completed timing matrix; the append-only raw
+    # files, sequence numbering, and analysis are order-independent.
+    records = execute_diagnostics(config, run_dir, variants, snapshot)
+    records.extend(execute_suite(config, run_dir, variants, snapshot))
+    _log("all jobs finished; hashing raw files and writing run-complete.json")
     raw_hashes = {
         path.relative_to(run_dir).as_posix(): sha256_file(path)
         for path in sorted((run_dir / "raw").glob("*.jsonl"))
@@ -1630,4 +1668,5 @@ def run_authoritative(
         .hexdigest(),
     }
     write_json_atomic(run_dir / "run-complete.json", completion)
+    _log(f"run complete: {len(records)} records, {len(job_hashes)} jobs")
     return records

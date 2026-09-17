@@ -213,6 +213,46 @@ class ProcessGuardTests(unittest.TestCase):
         self.assertEqual(result.status, "program_error", result)
         self.assertFalse(result.measurement_end_observed)
 
+    def test_slow_exit_after_endpoint_ack_is_still_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline_ready = root / "baseline-ready"
+            baseline_ack = root / "baseline-ack"
+            end_ready = root / "end-ready"
+            end_ack = root / "end-ack"
+            end_temporary = root / "end-ready.tmp"
+            script = "".join(
+                [
+                    "import json,pathlib,time; ",
+                    f"pathlib.Path({str(baseline_ready)!r}).write_text('ready'); ",
+                    f"p=pathlib.Path({str(baseline_ack)!r}); ",
+                    "exec('while not p.exists():\\n  time.sleep(.002)'); ",
+                    "completed=time.monotonic_ns(); ",
+                    f"q=pathlib.Path({str(end_temporary)!r}); ",
+                    "q.write_text(json.dumps({'worker_rss_bytes':1,"
+                    "'measurement_completed_monotonic_ns':completed})); ",
+                    f"q.replace(pathlib.Path({str(end_ready)!r})); ",
+                    f"p=pathlib.Path({str(end_ack)!r}); ",
+                    "exec('while not p.exists():\\n  time.sleep(.002)'); ",
+                    # Teardown slower than the old 1-second drain floor and the grace value.
+                    "time.sleep(1.5)",
+                ]
+            )
+            result = run_guarded(
+                [sys.executable, "-c", script],
+                timeout_seconds=5,
+                rss_limit_bytes=256 * 1024 * 1024,
+                poll_interval_seconds=0.05,
+                grace_seconds=0.05,
+                cwd=root,
+                baseline_ready_path=baseline_ready,
+                baseline_ack_path=baseline_ack,
+                measurement_end_ready_path=end_ready,
+                measurement_end_ack_path=end_ack,
+            )
+        self.assertEqual(result.status, "success", result)
+        self.assertTrue(result.measurement_end_observed)
+
     def test_startup_without_handshake_remains_bounded(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
